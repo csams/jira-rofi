@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+
+import argparse
+import contextlib
+import html
+import json
+import logging
+import os
+import requests
+import shlex
+import subprocess
+
+import filelock
+
+from datetime import datetime
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
+
+log = logging.getLogger(__file__)
+
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("input", nargs="*")
+    p.add_argument("--refresh-cache", action="store_true", default=False)
+    return p.parse_args()
+
+
+def cache_file():
+    path = os.environ.get("XDG_CACHE_HOME", "${HOME}/.cache")
+    path = os.path.expanduser(path)
+    path = os.path.expandvars(path)
+    dir = os.path.join(path, "rofi")
+    os.makedirs(dir, exist_ok=True)
+    return os.path.join(dir, "jira-cache.json")
+
+
+@contextlib.contextmanager
+def cache_lock():
+    with filelock.FileLock(cache_file() + ".lock") as fl:
+        # try to ensure we release the lock even if something goes wrong
+        try:
+            yield fl
+        except Exception as e:
+            log.error(e)
+
+
+def write_cache(issues):
+    with open(cache_file(), "w") as f:
+        json.dump(issues, f)
+
+
+def read_cache():
+    try:
+        with open(cache_file()) as f:
+            return json.load(f)
+    except:
+        return None
+
+
+def token_file():
+    path = os.environ.get("XDG_CONFIG_HOME", "${HOME}/.config")
+    path = os.path.expanduser(path)
+    path = os.path.expandvars(path)
+    return os.path.join(path, "rofi", "jira-token.txt")
+
+
+def jira_token():
+    token = os.environ.get("ROFI_JIRA_TOKEN")
+    if token is not None:
+        return token
+
+    with open(token_file()) as f:
+        return f.read().strip()
+
+
+def query_jira(base_url, jql, token, max_results):
+    url = f"{base_url}/rest/api/2/search"
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(url, {"jql": jql, "maxResults": max_results}, headers=headers)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def extract_issues(doc, base_url):
+    results = []
+    for issue in doc.get("issues", []):
+        fields = issue.get("fields", {})
+
+        key = html.unescape(issue["key"])
+        issue_type = html.unescape(fields["issuetype"]["name"])
+        summary = html.unescape(fields["summary"][:78])
+        status = html.unescape(fields["status"]["name"])
+        created = datetime.strptime(fields["created"], "%Y-%m-%dT%H:%M:%S.000%z").astimezone().strftime("%Y-%m-%d %H:%M")
+        updated = datetime.strptime(fields["updated"], "%Y-%m-%dT%H:%M:%S.000%z").astimezone().strftime("%Y-%m-%d %H:%M")
+        reporter = html.unescape(fields["reporter"]["displayName"] if fields["reporter"] is not None else "")[:23]
+        assignee = html.unescape(fields["assignee"]["displayName"] if fields["assignee"] is not None else "")[:23]
+        url = f"{base_url}/browse/{key}"
+
+        results.append({
+            "key": key,
+            "issuetype": issue_type,
+            "summary": summary,
+            "status": status,
+            "created": created,
+            "updated": updated,
+            "reporter": reporter,
+            "assignee": assignee,
+            "url": url,
+        })
+    return results
+
+
+def find_issues(url, jql, token, max_results=100):
+    with cache_lock():
+        issues = read_cache()
+        if issues is None:
+            results = query_jira(url, jql, token, max_results)
+            issues = extract_issues(results, url)
+            write_cache(issues)
+        return issues
+
+
+def refresh_cache(url, jql, token, max_results=100):
+    with cache_lock():
+        results = query_jira(url, jql, token, max_results)
+        issues = extract_issues(results, url)
+        write_cache(issues)
+
+
+def render_issues(issues):
+    row_fmt = "{0: <20}{1: <18}{2: <80}{3: <20}{4: <18}{5: <18}{6: <25}{7: <25}"
+    print("\000prompt\037Open Jira Issue\n")
+
+    # the "message" is a line just beneath the prompt box.  We use it to display a header.
+    header = row_fmt.format("Key", "Type", "Summary", "Status", "Created", "Updated", "Reporter", "Assignee")
+    print(f"\000message\037{header}\n")
+
+    for i in issues:
+        data = (i["key"], i["issuetype"], i["summary"], i["status"], i["created"], i["updated"],
+                i["reporter"], i["assignee"])
+        print(f"{row_fmt}\000info\037{i['url']}\n".format(*data))
+
+
+def get_action():
+    return os.environ.get("ROFI_RETV", "0")
+
+
+def get_issue_url():
+    return os.environ.get("ROFI_INFO")
+
+
+def open_url(url):
+    cmd = shlex.split(f'xdg-open "{url}"')
+    subprocess.check_output(cmd)
+
+
+def main():
+    jql = "(assignee=currentUser() or watcher=currentUser()) and status not in (Closed, Resolved) order by updated"
+    jira_instance = "https://issues.redhat.com"
+    token = jira_token()
+
+    args = parse_args()
+    if args.refresh_cache:
+        try:
+            refresh_cache(jira_instance, jql, token)
+            log.info("Cache refreshed successfully")
+        except Exception as ex:
+            log.exception(ex)
+    else:
+        initial = "0"
+        action = get_action()
+        if action == initial:
+            issues = find_issues(jira_instance, jql, token)
+            render_issues(issues)
+        else:
+            jira_instance = get_issue_url()
+            open_url(jira_instance)
+
+
+if __name__ == "__main__":
+    main()

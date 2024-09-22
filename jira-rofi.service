@@ -1,0 +1,12 @@
+[Unit]
+Description=A cache refresh service for jira issues browsed with rofi
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/jira.rofi --refresh-cache
+StandardOutput=append:%h/.local/state/jira-rofi/stdout.log
+StandardError=append:%h/.local/state/jira-rofi/stderr.log
+
+[Install]
+WantedBy=multi-user.target
