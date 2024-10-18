@@ -1,9 +1,9 @@
 # jira-rofi
-`jira-rofi` displays results from a jira query with `rofi`.  It also can be run as a background task to
+`jira-rofi` displays results from a jira query with [rofi](https://github.com/davatorium/rofi).  It also can be run as a background task to
 populate a cache from which results are displayed nearly instantaneously.
 
 ## Installation
-You'll need to `rofi` installed before beginning.
+You'll need to [rofi](https://github.com/davatorium/rofi) installed before beginning.
 
 Create a Personal Access Token (PAT) in your jira instance and copy it as the only line in
 `$HOME/.config/rofi/jira-token.txt`.
