@@ -1,20 +1,32 @@
 # jira-rofi
-`jira-rofi` displays results from a jira query with [rofi](https://github.com/davatorium/rofi).  It also can be run as a background task to
-populate a cache from which results are displayed nearly instantaneously.
+`jira-rofi` contains a script that uses [rofi](https://github.com/davatorium/rofi) to display results from a jira v2 REST API query.  It must
+also be run periodically as a background process to populate the cache from which results are displayed.
 
 ## Installation
-You'll need to [rofi](https://github.com/davatorium/rofi) installed before beginning.
+You'll need to have [rofi](https://github.com/davatorium/rofi) installed before beginning.
 
-Create a Personal Access Token (PAT) in your jira instance and copy it as the only line in
-`$HOME/.config/rofi/jira-token.txt`.
+Create a Personal Access Token (PAT) in your jira instance.  Then create a file at
+`$HOME/.config/rofi/jira-rofi-config.json` with the following structure:
+```json
+{
+    "jql": "(assignee=currentUser() or watcher=currentUser()) and status not in (Closed, Resolved) order by updated",
+    "url": "https://issues.redhat.com",
+    "token": "<your personal access token goes here"
+}
+```
+
+The `jql` in the example above is the default if the `jql` key isn't included.  If you populate the cache but
+change the `jql`, you'll need to delete the cache file and update it manually to see the new results
+immediately.  The bash example below has instructions for manually updating the cache.
+
+The cached data is stored at `$HOME/.cache/rofi/jira-cache.json`
 
 Next, install the python dependencies and the systemd files.  The following stanza likely can't be copied
 verbatim, but it gives the idea.
-
 ```bash
 pip install --user requests
 
-# Ensure jira.rofi is executable and copy it somewhere on your path. I use $HOME/.local/bin
+# Ensure jira.rofi is executable and copy it somewhere on your path.  I use $HOME/.local/bin
 chmod u+x jira.rofi
 cp jira.rofi $HOME/.local/bin
 
@@ -28,12 +40,14 @@ cp jira-rofi.timer $HOME/.config/systemd/user
 systemctl --user daemon-reload
 
 # Run the service once to build the cache
+# The cached data will be stored at $HOME/.cache/rofi/jira-cache.json
 systemctl --user start jira-rofi.service
 
 # Check the status
 systemctl --user status jira-rofi
 
-# Enable the timer. It will run the service every 15 minutes.
+# Enable the timer.  It will run the service every 15 minutes to update the cache.
+# The cached data will be stored at $HOME/.cache/rofi/jira-cache.json
 # Logs will go in $HOME/.local/state/jira-rofi/stderr.log
 systemctl --user enable jira-rofi.timer
 ```

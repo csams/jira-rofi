@@ -55,24 +55,30 @@ def read_cache():
     try:
         with open(cache_file()) as f:
             return json.load(f)
-    except:
+    except Exception:
         return None
 
 
-def token_file():
+def config_file():
     path = os.environ.get("XDG_CONFIG_HOME", "${HOME}/.config")
     path = os.path.expanduser(path)
     path = os.path.expandvars(path)
-    return os.path.join(path, "rofi", "jira-token.txt")
+    return os.path.join(path, "rofi", "jira-rofi-config.json")
 
 
-def jira_token():
-    token = os.environ.get("ROFI_JIRA_TOKEN")
-    if token is not None:
-        return token
+def config():
+    cfg = {}
+    with open(config_file()) as f:
+        cfg = json.load(f)
 
-    with open(token_file()) as f:
-        return f.read().strip()
+    default_jql = "(assignee=currentUser() or watcher=currentUser()) and status not in (Closed, Resolved) order by updated"
+    default_url = "https://issues.redhat.com"
+
+    cfg["token"] = os.environ.get("ROFI_JIRA_TOKEN", cfg.get("token"))
+    cfg["url"] = os.environ.get("ROFI_JIRA_URL", cfg.get("url", default_url))
+    cfg["jql"] = os.environ.get("ROFI_JIRA_JQL", cfg.get("jql", default_jql))
+
+    return cfg
 
 
 def query_jira(base_url, jql, token, max_results, start_at=0):
@@ -177,29 +183,31 @@ def open_url(url):
 
 
 def main():
-    jql = "(assignee=currentUser() or watcher=currentUser()) and status not in (Closed, Resolved) order by updated"
-    jira_instance = "https://issues.redhat.com"
-    token = jira_token()
+    cfg = config()
+
+    jql = cfg["jql"]
+    url = cfg["url"]
+    token = cfg["token"]
 
     args = parse_args()
     if args.refresh_cache:
         try:
-            refresh_cache(jira_instance, jql, token)
+            refresh_cache(url, jql, token)
             log.info("Cache refreshed successfully")
         except Exception as ex:
             log.exception(ex)
     elif args.jql:
-        issues = fetch_all_issues(jira_instance, args.jql, token)
-        render_plain(jira_instance, issues)
+        issues = fetch_all_issues(url, args.jql, token)
+        render_plain(url, issues)
     else:
         initial = "0"
         action = get_action()
         if action == initial:
-            issues = find_issues(jira_instance, jql, token)
+            issues = find_issues(url, jql, token)
             render_issues(issues)
         else:
-            jira_instance = get_issue_url()
-            open_url(jira_instance)
+            url = get_issue_url()
+            open_url(url)
 
 
 if __name__ == "__main__":
