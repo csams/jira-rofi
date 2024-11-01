@@ -24,7 +24,7 @@ The cached data is stored at `$HOME/.cache/rofi/jira-cache.json`
 Next, install the python dependencies and the systemd files.  The following stanza likely can't be copied
 verbatim, but it gives the idea.
 ```bash
-pip install --user requests
+pip install --user requests filelock
 
 # Ensure jira.rofi is executable and copy it somewhere on your path.  I use $HOME/.local/bin
 chmod u+x jira.rofi
