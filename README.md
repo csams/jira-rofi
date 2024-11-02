@@ -51,3 +51,11 @@ systemctl --user status jira-rofi
 # Logs will go in $HOME/.local/state/jira-rofi/stderr.log
 systemctl --user enable jira-rofi.timer
 ```
+
+## Interactive Mode
+You can run the script interactively with `jira.rofi --jql`.  It creates an input loop in which you can run
+`jql` queries against the server.  The results are output to the terminal as a table.  `readline` is enabled
+with history kept in `$XDG_CACHE_HOME/rofi/jira-rofi-history`.  `$XDG_CACHE_HOME` defaults to `$HOME/.cache`
+if unset.
+
+Type any of `exit`, `quit`, `:q`, or `Control-C` to exit the loop.
