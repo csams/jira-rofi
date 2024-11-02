@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-
 import argparse
 import contextlib
 import html
@@ -163,6 +162,9 @@ def render_issues(issues):
 
 def render_plain(url, issues):
     row_fmt = "{0: <50}{1: <18}{2: <70}{3: <20}{4: <18}{5: <25}{6: <25}"
+    header = row_fmt.format("Link", "Type", "Summary", "Status", "Updated", "Reporter", "Assignee")
+    print(header)
+    print("-" * 226)
     for i in issues:
         data = (f'{url}/browse/{i["key"]}', i["issuetype"], i["summary"][:68], i["status"], i["updated"],
                 i["reporter"][:23], i["assignee"][:23])
