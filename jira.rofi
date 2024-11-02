@@ -22,7 +22,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("input", nargs="*")
     p.add_argument("--refresh-cache", action="store_true", default=False)
-    p.add_argument("--jql", default="")
+    p.add_argument("--jql", action="store_true", default=False)
     return p.parse_args()
 
 
@@ -65,6 +65,15 @@ def config_file():
     return os.path.join(path, "rofi", "jira-rofi-config.json")
 
 
+def history_file():
+    path = os.environ.get("XDG_CACHE_HOME", "${HOME}/.cache")
+    path = os.path.expanduser(path)
+    path = os.path.expandvars(path)
+    dir = os.path.join(path, "rofi")
+    os.makedirs(dir, exist_ok=True)
+    return os.path.join(path, "rofi", "jira-rofi-history")
+
+
 def config():
     cfg = {}
     with open(config_file()) as f:
@@ -98,23 +107,37 @@ def extract_issues(doc, base_url):
         issue_type = html.unescape(fields["issuetype"]["name"])
         summary = html.unescape(fields["summary"])
         status = html.unescape(fields["status"]["name"])
-        created = datetime.strptime(fields["created"], "%Y-%m-%dT%H:%M:%S.000%z").astimezone().strftime("%Y-%m-%d %H:%M")
-        updated = datetime.strptime(fields["updated"], "%Y-%m-%dT%H:%M:%S.000%z").astimezone().strftime("%Y-%m-%d %H:%M")
-        reporter = html.unescape(fields["reporter"]["displayName"] if fields["reporter"] is not None else "")
-        assignee = html.unescape(fields["assignee"]["displayName"] if fields["assignee"] is not None else "")
+        created = (
+            datetime.strptime(fields["created"], "%Y-%m-%dT%H:%M:%S.000%z")
+            .astimezone()
+            .strftime("%Y-%m-%d %H:%M")
+        )
+        updated = (
+            datetime.strptime(fields["updated"], "%Y-%m-%dT%H:%M:%S.000%z")
+            .astimezone()
+            .strftime("%Y-%m-%d %H:%M")
+        )
+        reporter = html.unescape(
+            fields["reporter"]["displayName"] if fields["reporter"] is not None else ""
+        )
+        assignee = html.unescape(
+            fields["assignee"]["displayName"] if fields["assignee"] is not None else ""
+        )
         url = f"{base_url}/browse/{key}"
 
-        results.append({
-            "key": key,
-            "issuetype": issue_type,
-            "summary": summary,
-            "status": status,
-            "created": created,
-            "updated": updated,
-            "reporter": reporter,
-            "assignee": assignee,
-            "url": url,
-        })
+        results.append(
+            {
+                "key": key,
+                "issuetype": issue_type,
+                "summary": summary,
+                "status": status,
+                "created": created,
+                "updated": updated,
+                "reporter": reporter,
+                "assignee": assignee,
+                "url": url,
+            }
+        )
     return results
 
 
@@ -149,25 +172,45 @@ def refresh_cache(url, jql, token, max_results=100):
 def render_issues(issues):
     row_fmt = "{0: <20}{1: <18}{2: <80}{3: <20}{4: <18}{5: <18}{6: <25}{7: <25}"
     print("\000prompt\037Open Jira Issue\n")
+    print("\000data\037show-issues\n")
 
     # the "message" is a line just beneath the prompt box.  We use it to display a header.
-    header = row_fmt.format("Key", "Type", "Summary", "Status", "Created", "Updated", "Reporter", "Assignee")
+    header = row_fmt.format(
+        "Key", "Type", "Summary", "Status", "Created", "Updated", "Reporter", "Assignee"
+    )
     print(f"\000message\037{header}\n")
 
     for i in issues:
-        data = (i["key"], i["issuetype"], i["summary"][:78], i["status"], i["created"], i["updated"],
-                i["reporter"][:23], i["assignee"][:23])
+        data = (
+            i["key"],
+            i["issuetype"],
+            i["summary"][:78],
+            i["status"],
+            i["created"],
+            i["updated"],
+            i["reporter"][:23],
+            i["assignee"][:23],
+        )
         print(f"{row_fmt}\000info\037{i['url']}\n".format(*data))
 
 
 def render_plain(url, issues):
     row_fmt = "{0: <50}{1: <18}{2: <70}{3: <20}{4: <18}{5: <25}{6: <25}"
-    header = row_fmt.format("Link", "Type", "Summary", "Status", "Updated", "Reporter", "Assignee")
+    header = row_fmt.format(
+        "Link", "Type", "Summary", "Status", "Updated", "Reporter", "Assignee"
+    )
     print(header)
     print("-" * 226)
     for i in issues:
-        data = (f'{url}/browse/{i["key"]}', i["issuetype"], i["summary"][:68], i["status"], i["updated"],
-                i["reporter"][:23], i["assignee"][:23])
+        data = (
+            f'{url}/browse/{i["key"]}',
+            i["issuetype"],
+            i["summary"][:68],
+            i["status"],
+            i["updated"],
+            i["reporter"][:23],
+            i["assignee"][:23],
+        )
         print(f"{row_fmt}".format(*data))
 
 
@@ -199,8 +242,25 @@ def main():
         except Exception as ex:
             log.exception(ex)
     elif args.jql:
-        issues = fetch_all_issues(url, args.jql, token)
-        render_plain(url, issues)
+        import readline
+        import atexit
+
+        histfile = history_file()
+        try:
+            readline.read_history_file(histfile)
+        except FileNotFoundError:
+            pass
+
+        atexit.register(readline.write_history_file, histfile)
+
+        while True:
+            jql = input("JQL> ")
+            cmd = jql.lower()
+            if cmd in set(["exit", "quit", ":q"]):
+                return
+            issues = fetch_all_issues(url, jql, token)
+            render_plain(url, issues)
+            print()
     else:
         initial = "0"
         action = get_action()
