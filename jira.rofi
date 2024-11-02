@@ -254,12 +254,17 @@ def main():
         atexit.register(readline.write_history_file, histfile)
 
         while True:
-            jql = input("JQL> ")
-            cmd = jql.lower()
-            if cmd in set(["exit", "quit", ":q"]):
+            try:
+                jql = input("JQL> ")
+                cmd = jql.lower()
+                if cmd in set(["exit", "quit", ":q"]):
+                    return
+                issues = fetch_all_issues(url, jql, token)
+                render_plain(url, issues)
+            except Exception as e:
+                print(e)
+            except KeyboardInterrupt as kb:
                 return
-            issues = fetch_all_issues(url, jql, token)
-            render_plain(url, issues)
             print()
     else:
         initial = "0"
