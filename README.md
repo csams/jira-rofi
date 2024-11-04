@@ -11,7 +11,7 @@ Create a Personal Access Token (PAT) in your jira instance.  Then create a file 
 {
     "jql": "(assignee=currentUser() or watcher=currentUser()) and status not in (Closed, Resolved) order by updated",
     "url": "https://issues.redhat.com",
-    "token": "<your personal access token goes here"
+    "token": "<your personal access token goes here>"
 }
 ```
 
